@@ -641,10 +641,9 @@ class StreamDeckApp(ctk.CTk):
         self.configure(fg_color=self.C["bg"])
 
         self._build_ui()
-        self._start_serial()
-        self._start_hotkeys()
-        self._start_scheduler()
-        self._load_scheduled_actions()
+        # Iniciar servicios secundarios en diferido para mejorar
+        # la percepción de arranque de la ventana principal.
+        self.after(80, self._start_background_services)
 
         # ── OPT: flush al cerrar ──────────────────────────────────────────
         self.protocol("WM_DELETE_WINDOW", self._on_app_close)
@@ -654,6 +653,13 @@ class StreamDeckApp(ctk.CTk):
         _config_saver.flush_now()
         _stats_cache.flush()
         self.destroy()
+
+    def _start_background_services(self):
+        """Levanta tareas no críticas después de pintar la UI inicial."""
+        self._start_serial()
+        self._start_hotkeys()
+        self._start_scheduler()
+        self._load_scheduled_actions()
 
     # ── Acceso ────────────────────────────────────────────────────────────────
 
@@ -2313,13 +2319,17 @@ class StreamDeckApp(ctk.CTk):
     def _start_hotkeys(self):
         if not KEYBOARD_OK:
             return
-        try:
-            for i in range(1, 10):
-                keyboard.add_hotkey(f"ctrl+{i}",
-                    lambda idx=i-1: self.after(0, lambda i=idx: self._hotkey_press(i)))
-            self._hotkeys_active = True
-        except Exception as e:
-            print(f"[hotkeys] {e}")
+        def _register():
+            try:
+                for i in range(1, 10):
+                    keyboard.add_hotkey(
+                        f"ctrl+{i}",
+                        lambda idx=i-1: self.after(0, lambda i=idx: self._hotkey_press(i))
+                    )
+                self._hotkeys_active = True
+            except Exception as e:
+                print(f"[hotkeys] {e}")
+        threading.Thread(target=_register, daemon=True).start()
 
     def _hotkey_press(self, idx):
         if idx < self._total():
