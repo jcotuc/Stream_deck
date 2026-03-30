@@ -33,9 +33,19 @@ v12.1 — Optimizaciones de rendimiento:
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import filedialog, simpledialog, messagebox, colorchooser
-import subprocess, webbrowser, os, time, json, threading, copy, datetime, sched
-import pyperclip, requests as _requests_mod
-from PIL import Image, ImageTk
+import copy
+import datetime
+import json
+import os
+import sched
+import subprocess
+import threading
+import time
+import webbrowser
+
+import pyperclip
+import requests as _requests_mod
+from PIL import Image
 
 try:
     import pystray
@@ -58,7 +68,8 @@ except ImportError:
     PYNPUT_OK = False
 
 try:
-    import serial, serial.tools.list_ports
+    import serial
+    import serial.tools.list_ports
     SERIAL_OK = True
 except ImportError:
     SERIAL_OK = False
@@ -86,17 +97,45 @@ TYPE_SYMBOL  = {
 }
 
 TYPE_HELP = {
-    "program": "Ruta o comando a ejecutar. Ej: notepad.exe  /  calc",
-    "url":     "URL completa. Ej: https://google.com",
-    "urls":    "URLs separadas por coma. Ej: https://a.com,https://b.com",
-    "file":    "Ruta al archivo. Usá 'Archivo' para buscarlo.",
-    "text":    "Texto que se copiará y pegará automáticamente.",
-    "macro":   "Secuencia de acciones. Configurá los pasos abajo.",
-    "toggle":  'JSON: {"state":0,"on":{"action_type":"url","action_value":"..."},"off":{...}}',
-    "confirm": 'JSON: {"message":"¿Seguro?","action":{"action_type":"url","action_value":"..."}}',
-    "script":  "Ruta al archivo .py a ejecutar. Usá 'Script .py' para buscarlo.",
-    "api":     'JSON: {"method":"POST","url":"https://...","body":"","headers":{}}',
-    "system":  "Seleccioná un comando del sistema de la lista.",
+    "program": "Abrí una app o comando. Ejemplo: calc / notepad.exe",
+    "url":     "Abrí una página web. Ejemplo: https://google.com",
+    "urls":    "Abrí varias webs separadas por coma.",
+    "file":    "Abrí un archivo. Podés usar el botón «📂 Archivo».",
+    "text":    "Copia y pega texto automáticamente.",
+    "macro":   "Encadená varios pasos con el constructor guiado.",
+    "toggle":  "Alterna entre estado ON y OFF. Usá «⚡ Cargar ejemplo».",
+    "confirm": "Muestra una confirmación antes de ejecutar. Usá ejemplo guiado.",
+    "script":  "Ejecuta un script .py. Podés usar «📜 Script .py».",
+    "api":     "Llama a un webhook/API. Podés cargar un ejemplo y editarlo.",
+    "system":  "Elegí una acción del sistema desde la lista.",
+}
+
+ACTION_DISPLAY = {
+    "program": "Abrir programa",
+    "url": "Abrir sitio web",
+    "urls": "Abrir varios sitios",
+    "file": "Abrir archivo",
+    "text": "Pegar texto",
+    "macro": "Macro (varios pasos)",
+    "toggle": "Interruptor ON/OFF",
+    "confirm": "Confirmar antes de ejecutar",
+    "script": "Ejecutar script Python",
+    "api": "Enviar webhook/API",
+    "key": "Atajo de teclado",
+    "system": "Comando del sistema",
+}
+
+ACTION_PLACEHOLDER = {
+    "program": "Ej: calc  o  notepad.exe",
+    "url": "Ej: https://google.com",
+    "urls": "Ej: https://a.com, https://b.com",
+    "file": "Ruta del archivo…",
+    "text": "Escribí el texto a pegar…",
+    "script": "Ruta del script .py…",
+    "api": '{"method":"POST","url":"https://...","body":"","headers":{}}',
+    "toggle": '{"state":0,"on":{"action_type":"url","action_value":"https://..."},"off":{"action_type":"url","action_value":"https://..."}}',
+    "confirm": '{"message":"¿Seguro?","action":{"action_type":"program","action_value":"calc"}}',
+    "key": "Ej: ctrl+shift+s",
 }
 
 
@@ -1054,7 +1093,6 @@ class StreamDeckApp(ctk.CTk):
 
     def _paint_single_slot(self, i):
         """Repinta un solo slot — invalida su snapshot para forzar repintado."""
-        C     = self.C
         p     = self._profile
         total = p["cols"] * p["rows"]
         if i >= total or i >= MAX_BUTTONS:
@@ -1109,7 +1147,7 @@ class StreamDeckApp(ctk.CTk):
         # Nombre
         name_row = ctk.CTkFrame(self._editor, fg_color="transparent")
         name_row.grid(row=1, column=0, sticky="ew", padx=14, pady=(8,0))
-        ctk.CTkLabel(name_row, text="NOMBRE", font=("Arial",9,"bold"),
+        ctk.CTkLabel(name_row, text="Nombre del botón", font=("Arial",10,"bold"),
                      text_color=C["text_dim"]).pack(anchor="w", pady=(0,3))
         self._ed_name = ctk.CTkEntry(name_row, fg_color=C["surface3"],
                                      border_color=C["border"], border_width=1,
@@ -1173,18 +1211,19 @@ class StreamDeckApp(ctk.CTk):
         # ╚══════════════════════════════════╝
         self._page_accion_widgets = []
 
-        s_tipo = sec("TIPO DE ACCIÓN")
+        s_tipo = sec("¿Qué querés que haga este botón?")
         self._page_accion_widgets.append(s_tipo.master)
 
         grid_tipos = ctk.CTkFrame(s_tipo, fg_color="transparent")
         grid_tipos.pack(fill="x")
         self._ed_pills = {}
         TYPE_LABELS = {
-            "program": ("▶","Program"),  "url":   ("⊕","URL"),
-            "urls":    ("⊕","URLs"),     "file":  ("▤","Archivo"),
-            "text":    ("✎","Texto"),    "macro": ("⛓","Macro"),
-            "toggle":  ("⇄","Toggle"),  "confirm":("⚠","Confirm"),
-            "script":  ("🐍","Script"),  "api":   ("🌐","API"),
+            "program": ("▶","Programa"), "url":   ("⊕","Web"),
+            "urls":    ("⊕","Varias web"), "file":("▤","Archivo"),
+            "text":    ("✎","Texto"), "macro": ("⛓","Macro"),
+            "toggle":  ("⇄","ON/OFF"), "confirm":("⚠","Confirmar"),
+            "script":  ("🐍","Script"), "api":   ("🌐","Webhook"),
+            "key":     ("⌨","Atajo"), "system": ("⚙","Sistema"),
         }
         for col, at in enumerate(ACTION_TYPES):
             icon, label = TYPE_LABELS.get(at, ("?", at))
@@ -1205,7 +1244,7 @@ class StreamDeckApp(ctk.CTk):
                 w.bind("<Button-1>", lambda e, t=at: self._set_editor_type(t))
             self._ed_pills[at] = cell
 
-        s_val = sec("VALOR")
+        s_val = sec("Configurar acción")
         self._page_accion_widgets.append(s_val.master)
 
         self._ed_help = ctk.CTkLabel(s_val, text="", font=("Arial",9),
@@ -1258,6 +1297,27 @@ class StreamDeckApp(ctk.CTk):
                       text_color=C["text_muted"], hover_color=C["surface2"],
                       border_width=1, border_color=C["border"], corner_radius=6,
                       command=self._pick_script).pack(side="left")
+
+        easy_templates = ctk.CTkFrame(s_val, fg_color="transparent")
+        easy_templates.pack(fill="x", pady=(6,0))
+        ctk.CTkButton(
+            easy_templates, text="⚡ Ejemplo Toggle", width=110, height=26,
+            font=("Arial",10), fg_color=C["surface3"], text_color=C["text_muted"],
+            hover_color=C["surface2"], border_width=1, border_color=C["border"],
+            corner_radius=6, command=lambda: self._apply_easy_template("toggle")
+        ).pack(side="left", padx=(0,4))
+        ctk.CTkButton(
+            easy_templates, text="⚡ Ejemplo Confirmar", width=130, height=26,
+            font=("Arial",10), fg_color=C["surface3"], text_color=C["text_muted"],
+            hover_color=C["surface2"], border_width=1, border_color=C["border"],
+            corner_radius=6, command=lambda: self._apply_easy_template("confirm")
+        ).pack(side="left", padx=(0,4))
+        ctk.CTkButton(
+            easy_templates, text="⚡ Ejemplo API", width=100, height=26,
+            font=("Arial",10), fg_color=C["surface3"], text_color=C["text_muted"],
+            hover_color=C["surface2"], border_width=1, border_color=C["border"],
+            corner_radius=6, command=lambda: self._apply_easy_template("api")
+        ).pack(side="left")
 
         s_macro = sec("PASOS DEL MACRO")
         self._page_accion_widgets.append(s_macro.master)
@@ -1447,15 +1507,12 @@ class StreamDeckApp(ctk.CTk):
     # ══════════════════════════════════════════════════════════════════════════
 
     def _paint_editor(self):
-        C    = self.C
         idx  = self._sel_btn
         btns = self._buttons
         cfg  = btns[idx] if idx < len(btns) else {}
         name = cfg.get("name", f"Botón {idx+1}")
         tipo = cfg.get("action_type", ACTION_TYPES[0])
-        val  = cfg.get("action_value", "")
         custom_color = cfg.get("custom_color", "")
-        icon_path    = cfg.get("icon_path", "")
 
         self._editor_type = tipo
         icon_bg, icon_fg = self._tcolors(tipo, custom_color)
@@ -1464,7 +1521,7 @@ class StreamDeckApp(ctk.CTk):
         self._ed_avatar.configure(fg_color=icon_bg)
         self._ed_avatar_lbl.configure(text=TYPE_SYMBOL.get(tipo,"?"), text_color=icon_fg)
         self._ed_title.configure(text=name)
-        self._ed_sub.configure(text=f"Botón {idx+1}  ·  {tipo}")
+        self._ed_sub.configure(text=f"Botón {idx+1}  ·  {ACTION_DISPLAY.get(tipo, tipo)}")
 
         # Nombre — siempre visible
         self._ed_name.delete(0, "end")
@@ -1497,7 +1554,7 @@ class StreamDeckApp(ctk.CTk):
 
         if tab_name == "Acción":
             self._paint_pills(tipo)
-            self._ed_help.configure(text=TYPE_HELP.get(tipo, ""))
+            self._refresh_action_guidance(tipo)
 
             self._ed_val_entry.pack_forget()
             self._ed_val_text.pack_forget()
@@ -1587,6 +1644,14 @@ class StreamDeckApp(ctk.CTk):
                 border_color=C["accent"] if active else C["border"],
                 border_width=2 if active else 1)
 
+    def _refresh_action_guidance(self, tipo):
+        display = ACTION_DISPLAY.get(tipo, tipo)
+        help_text = TYPE_HELP.get(tipo, "")
+        self._ed_help.configure(text=f"{display}\n{help_text}")
+        self._ed_val_entry.configure(
+            placeholder_text=ACTION_PLACEHOLDER.get(tipo, "Ingresá el valor...")
+        )
+
     def _set_editor_type(self, tipo):
         self._editor_type = tipo
         self._paint_pills(tipo)
@@ -1609,11 +1674,22 @@ class StreamDeckApp(ctk.CTk):
         else:
             self._macro_frame.master.pack_forget()
 
-        self._ed_help.configure(text=TYPE_HELP.get(tipo, ""))
+        self._refresh_action_guidance(tipo)
         icon_bg, icon_fg = self._tcolors(tipo)
         self._ed_avatar.configure(fg_color=icon_bg)
         self._ed_avatar_lbl.configure(text=TYPE_SYMBOL.get(tipo,"?"), text_color=icon_fg)
-        self._ed_sub.configure(text=f"Botón {self._sel_btn+1}  ·  {tipo}")
+        self._ed_sub.configure(text=f"Botón {self._sel_btn+1}  ·  {ACTION_DISPLAY.get(tipo, tipo)}")
+
+    def _apply_easy_template(self, tipo):
+        templates = {
+            "toggle": '{"state":0,"on":{"action_type":"url","action_value":"https://mail.google.com"},"off":{"action_type":"url","action_value":"https://calendar.google.com"}}',
+            "confirm": '{"message":"¿Seguro que querés ejecutar esta acción?","action":{"action_type":"program","action_value":"calc"}}',
+            "api": '{"method":"POST","url":"https://example.com/webhook","body":"{\\"event\\":\\"button_pressed\\"}","headers":{"Content-Type":"application/json"}}',
+        }
+        self._set_editor_type(tipo)
+        self._ed_val_entry.delete(0, "end")
+        self._ed_val_entry.insert(0, templates[tipo])
+        self._show_status(f"Plantilla «{ACTION_DISPLAY.get(tipo, tipo)}» cargada", True)
 
     def _pick_file(self):
         path = filedialog.askopenfilename(title="Seleccionar archivo")
@@ -1697,7 +1773,7 @@ class StreamDeckApp(ctk.CTk):
         name = self._ed_name.get().strip() or f"Botón {idx+1}"
         tipo = self._editor_type
 
-        PRESERVE_TYPES = {"macro", "system", "toggle", "confirm"}
+        PRESERVE_TYPES = {"macro", "system"}
 
         if tipo == "text":
             val = self._ed_val_text.get("1.0","end").strip()
@@ -2016,7 +2092,7 @@ class StreamDeckApp(ctk.CTk):
                 "custom_color": existing.get("custom_color",""),
                 "icon_path":    existing.get("icon_path",""),
             }
-            ok = save_all(self._data)
+            save_all(self._data)
             self._show_status(f"✓ Macro guardada — {len(steps)} pasos", True)
             self._sel_btn = idx
             self._editor_type = "macro"
@@ -2371,7 +2447,7 @@ class StreamDeckApp(ctk.CTk):
         try:
             with open(path,"w",encoding="utf-8") as f:
                 json.dump(self._data, f, indent=4, ensure_ascii=False)
-            self._show_status(f"✓ Backup exportado", True)
+            self._show_status("✓ Backup exportado", True)
         except Exception as e:
             self._show_status(f"✗ Error: {e}", False)
 
@@ -3396,7 +3472,8 @@ class MacroBuilderWindow(tk.Toplevel):
             150, lambda: self._update_delay(idx, dvar.get()))
 
     def _remove_step(self, idx):
-        self._steps.pop(idx); self._render_steps()
+        self._steps.pop(idx)
+        self._render_steps()
 
     def _move(self, idx, d):
         ni = idx+d
@@ -3414,8 +3491,10 @@ class MacroBuilderWindow(tk.Toplevel):
 
     def _update_delay(self, idx, v):
         if idx < len(self._steps):
-            try: self._steps[idx]["delay"] = max(0.0, float(v))
-            except ValueError: pass
+            try:
+                self._steps[idx]["delay"] = max(0.0, float(v))
+            except ValueError:
+                pass
 
     def _browse(self, idx, vvar):
         tipo = self._steps[idx].get("type","")
@@ -3457,10 +3536,12 @@ class MacroBuilderWindow(tk.Toplevel):
 
     def _on_close(self):
         self._recording = False
-        for l in [self._kb_listener, self._ms_listener]:
-            if l:
-                try: l.stop()
-                except Exception: pass
+        for listener in [self._kb_listener, self._ms_listener]:
+            if listener:
+                try:
+                    listener.stop()
+                except Exception:
+                    pass
         try:
             self._steps_canvas.unbind("<MouseWheel>")
             self._steps_frame.unbind("<MouseWheel>")
@@ -3468,11 +3549,15 @@ class MacroBuilderWindow(tk.Toplevel):
             pass
         # Cancelar debounce timers
         for timer_id in self._val_debounce_timers.values():
-            try: self.after_cancel(timer_id)
-            except Exception: pass
+            try:
+                self.after_cancel(timer_id)
+            except Exception:
+                pass
         for timer_id in self._delay_debounce_timers.values():
-            try: self.after_cancel(timer_id)
-            except Exception: pass
+            try:
+                self.after_cancel(timer_id)
+            except Exception:
+                pass
         self.destroy()
 
 
