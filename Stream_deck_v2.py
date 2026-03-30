@@ -33,9 +33,19 @@ v12.1 — Optimizaciones de rendimiento:
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import filedialog, simpledialog, messagebox, colorchooser
-import subprocess, webbrowser, os, time, json, threading, copy, datetime, sched
-import pyperclip, requests as _requests_mod
-from PIL import Image, ImageTk
+import copy
+import datetime
+import json
+import os
+import sched
+import subprocess
+import threading
+import time
+import webbrowser
+
+import pyperclip
+import requests as _requests_mod
+from PIL import Image
 
 try:
     import pystray
@@ -58,7 +68,8 @@ except ImportError:
     PYNPUT_OK = False
 
 try:
-    import serial, serial.tools.list_ports
+    import serial
+    import serial.tools.list_ports
     SERIAL_OK = True
 except ImportError:
     SERIAL_OK = False
@@ -1054,7 +1065,6 @@ class StreamDeckApp(ctk.CTk):
 
     def _paint_single_slot(self, i):
         """Repinta un solo slot — invalida su snapshot para forzar repintado."""
-        C     = self.C
         p     = self._profile
         total = p["cols"] * p["rows"]
         if i >= total or i >= MAX_BUTTONS:
@@ -1447,15 +1457,12 @@ class StreamDeckApp(ctk.CTk):
     # ══════════════════════════════════════════════════════════════════════════
 
     def _paint_editor(self):
-        C    = self.C
         idx  = self._sel_btn
         btns = self._buttons
         cfg  = btns[idx] if idx < len(btns) else {}
         name = cfg.get("name", f"Botón {idx+1}")
         tipo = cfg.get("action_type", ACTION_TYPES[0])
-        val  = cfg.get("action_value", "")
         custom_color = cfg.get("custom_color", "")
-        icon_path    = cfg.get("icon_path", "")
 
         self._editor_type = tipo
         icon_bg, icon_fg = self._tcolors(tipo, custom_color)
@@ -2016,7 +2023,7 @@ class StreamDeckApp(ctk.CTk):
                 "custom_color": existing.get("custom_color",""),
                 "icon_path":    existing.get("icon_path",""),
             }
-            ok = save_all(self._data)
+            save_all(self._data)
             self._show_status(f"✓ Macro guardada — {len(steps)} pasos", True)
             self._sel_btn = idx
             self._editor_type = "macro"
@@ -2371,7 +2378,7 @@ class StreamDeckApp(ctk.CTk):
         try:
             with open(path,"w",encoding="utf-8") as f:
                 json.dump(self._data, f, indent=4, ensure_ascii=False)
-            self._show_status(f"✓ Backup exportado", True)
+            self._show_status("✓ Backup exportado", True)
         except Exception as e:
             self._show_status(f"✗ Error: {e}", False)
 
@@ -3396,7 +3403,8 @@ class MacroBuilderWindow(tk.Toplevel):
             150, lambda: self._update_delay(idx, dvar.get()))
 
     def _remove_step(self, idx):
-        self._steps.pop(idx); self._render_steps()
+        self._steps.pop(idx)
+        self._render_steps()
 
     def _move(self, idx, d):
         ni = idx+d
@@ -3414,8 +3422,10 @@ class MacroBuilderWindow(tk.Toplevel):
 
     def _update_delay(self, idx, v):
         if idx < len(self._steps):
-            try: self._steps[idx]["delay"] = max(0.0, float(v))
-            except ValueError: pass
+            try:
+                self._steps[idx]["delay"] = max(0.0, float(v))
+            except ValueError:
+                pass
 
     def _browse(self, idx, vvar):
         tipo = self._steps[idx].get("type","")
@@ -3457,10 +3467,12 @@ class MacroBuilderWindow(tk.Toplevel):
 
     def _on_close(self):
         self._recording = False
-        for l in [self._kb_listener, self._ms_listener]:
-            if l:
-                try: l.stop()
-                except Exception: pass
+        for listener in [self._kb_listener, self._ms_listener]:
+            if listener:
+                try:
+                    listener.stop()
+                except Exception:
+                    pass
         try:
             self._steps_canvas.unbind("<MouseWheel>")
             self._steps_frame.unbind("<MouseWheel>")
@@ -3468,11 +3480,15 @@ class MacroBuilderWindow(tk.Toplevel):
             pass
         # Cancelar debounce timers
         for timer_id in self._val_debounce_timers.values():
-            try: self.after_cancel(timer_id)
-            except Exception: pass
+            try:
+                self.after_cancel(timer_id)
+            except Exception:
+                pass
         for timer_id in self._delay_debounce_timers.values():
-            try: self.after_cancel(timer_id)
-            except Exception: pass
+            try:
+                self.after_cancel(timer_id)
+            except Exception:
+                pass
         self.destroy()
 
 
